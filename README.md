@@ -7,13 +7,13 @@ To install, run `conda develop .`, to install locally as a package.
 
 ### Use
 To use, define a test statistic returning `0` (reject hypothesis) or `1` (accept hypthesis). 
-```
+```python
 import statsmodels.api as sm
 def T(X): 
     return 1*(sm.OLS(X[:, 2], sm.tools.add_constant(X[:, 0])).fit().pvalues[1] < 0.05)
 ```
 as well as a weight function
-```
+```python
 from scipy.stats import norm
 p = norm.pdf
 def weight(X, scale=1): 
@@ -22,7 +22,8 @@ def weight(X, scale=1):
 
 Once test and weight are defined, define the `ShiftTester` class, and test
 
-```
+```python
+from resample_and_test import ShiftTester
 psi = ShiftTester(weight, T, replacement=False, verbose=False)
 psi.test(X, replacement="REPL-reject", m=20)
 ```
