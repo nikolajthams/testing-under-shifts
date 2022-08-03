@@ -1,10 +1,11 @@
 import numpy as np
-from scipy.stats import norm
+from scipy.stats import norm, cauchy
 import pandas as pd
 from tqdm import tqdm
 import torch
 import statsmodels.api as sm
 import statsmodels.formula.api as smf
+import warnings
 
 # Load kcgof for testing conditional
 import kcgof.util as util
@@ -29,11 +30,17 @@ class ShiftTester():
         - replacement: boolean, indicating whether or not resampling is with replacement
         - degenerate: string [raise, retry, ignore], specifying handling of degenerate resamples
     """
-    def __init__(self, weight, T, rate=lambda n: n**0.45, replacement=False,
+    def __init__(self, weight, T=None, rate=lambda n: n**0.45, replacement=False,
                  degenerate="raise", reject_retries=100, verbose=False,
-                 gibbs_steps=10, alternative_sampler=False):
+                 gibbs_steps=10, alternative_sampler=False, p_val=None):
         self.weight, self.rate, self.T = weight, rate, T
-        self.replacement = replacement
+        self.p_val = p_val
+        if replacement == "False":
+            self.replacement = False
+        elif replacement == "True":
+            self.replacement = True
+        else:
+            self.replacement = replacement
         self.degenerate = degenerate
         self.reject_retries = reject_retries
         self.gibbs_steps = gibbs_steps
@@ -143,12 +150,6 @@ class ShiftTester():
 
         return out
 
-    def test(self, X, replacement=None, m=None, store_last=False):
-        # Resample data
-        X_m = self.resample(X, replacement, m=m, store_last=store_last)
-
-        # Apply test statistic
-        return self.T(X_m)
 
     def kernel_conditional_validity(self, X, cond, j_x, j_y, return_p=False):
         """
@@ -259,11 +260,45 @@ class ShiftTester():
         # Create list of tests to conduct
         tests = [":".join([f"C(x{idx})[{val}]" for idx, val in zip(j_x, outcome)]) + f"={p}" for outcome,p in log_odds.items()]
 
+
         # Conduct F-test and get p-value
         p_val = smf.logit(formula=formula, data=df).fit(disp=0).f_test(tests).pvalue
 
+
+
         if return_p: return p_val
         return 1*(p_val < 0.05)
+    
+    def logistic_validity(self, X, j_x, j_y, return_p=False):
+        """
+        Test that resampled data has the correct conditional
+
+        X:
+            Data (resampled) in numpy format
+
+        j_y, j_x:
+            Lists specifying which columns in X are respectively y and x.
+            E.g. j_x = [0, 1, 2], j_y = [3]
+
+        return_p:
+            If True, returns p-value, else 0-1 indicator of rejection
+        """
+        # Convert X to data frame
+        df = pd.DataFrame(X[:,j_y + j_x], columns = ["x"+str(i) for i in j_y + j_x])
+
+        # Setup formula for statsmodels
+        formula = f"x{j_y[0]}~" + "+".join(f"x{i}" for i in j_x)
+
+
+        # Create list of tests to conduct
+        tests = [f"x{j}=0" for j in j_x]
+
+        # Conduct F-test and get p-value
+        p_val = smf.logit(formula, data=df).fit(disp=0).f_test(tests).pvalue
+
+        if return_p: return p_val
+        return 1*(p_val < 0.05)
+
 
     def tune_m(self, X, cond, j_x, j_y, gaussian=False, binary=False, m_init = None,
                m_factor=2, p_cutoff=0.1, repeats=100, const=None, replacement=None):
@@ -294,3 +329,87 @@ class ShiftTester():
             if (np.min(res) > p_cutoff): m = int(min(m_factor*m, n))
 
         return m
+    
+    def combine_p_vals_hartung(self, p_vals, warn, kappa=None):
+        n_tests = len(p_vals)
+
+        if min(p_vals) == 0:
+            if warn:
+                warnings.warn("p_vals contains 0, this may cause problems in the Hartung method", RuntimeWarning)
+            return 0
+        if max(p_vals) == 1:
+            if warn:
+                warnings.warn("p_vals contains 1, this may cause problems in the Hartung method", RuntimeWarning)
+            return 1
+
+        p_transformed = norm.ppf(p_vals)
+        lamb = 1/n_tests
+
+        rho = max(-1/(n_tests-1), 1 - np.var(p_transformed, ddof=1))
+        if kappa is None:
+            kappa = 1 + 1/(n_tests - 1) - rho
+        
+        num = lamb*p_transformed.sum()
+        denom = np.sqrt(lamb + (1 - lamb)*(rho + kappa * np.sqrt(2/(n_tests + 1)))*(1-rho))
+        t = num/denom
+        
+        return 2*norm.cdf(-np.abs(t))
+
+
+    def combine_p_vals_meinshausen(self, p_vals, gamma=None, gamma_min=0.05, grid_size=100):
+        if gamma is not None:
+            return np.quantile(p_vals/gamma, gamma)
+        else:
+            grid = np.linspace(gamma_min, 1, grid_size)
+            return np.min([np.quantile(p_vals/g, g) for g in grid])
+
+    def combine_p_vals_cct(selv, p_vals, warn):
+        if min(p_vals) == 0:
+            if warn:
+                warnings.warn("p_vals contains 0, this may cause problems in the CCT method", RuntimeWarning)
+            return 0
+        if max(p_vals) == 1:
+            if warn:
+                warnings.warn("p_vals contains 1, this may cause problems in the CCT method", RuntimeWarning)
+            return 1
+        
+        n_tests = len(p_vals)
+
+        weights = np.repeat(1/n_tests, p_vals.shape)
+        is_small = np.where(p_vals < 1e-16)[0]
+        is_large = np.where(p_vals >= 1e-16)[0]
+        
+        cct_stat = sum((weights[is_small]/p_vals[is_small])/np.pi)
+        cct_stat += sum(weights[is_large]*np.tan((0.5-p_vals[is_large])*np.pi))
+        
+        if cct_stat > 1e16:
+            p_val = (1/cct_stat)/np.pi
+        else:
+            p_val = 1 - cauchy.cdf(cct_stat)
+        return p_val
+
+    def test(self, X, replacement=None, m=None, store_last=False):
+        # Resample data
+        X_m = self.resample(X, replacement, m=m, store_last=store_last)
+
+        # Apply test statistic
+        return self.T(X_m)
+    
+    def combination_test(self, X, replacement=None, m=None, store_last=False, n_combinations=10, method="hartung", alpha=None, warn=True):
+        # Compute p_vals across multiple resamples
+        p_vals = np.array([self.p_val(self.resample(X, replacement, m=m, store_last=store_last)) for _ in range(n_combinations)])
+        
+        if method == "hartung":
+            p_val = self.combine_p_vals_hartung(p_vals=p_vals, warn=warn)
+        elif method == "meinshausen":
+            p_val = self.combine_p_vals_meinshausen(p_vals=p_vals)
+        elif method == "cct":
+            p_val = self.combine_p_vals_cct(p_vals=p_vals, warn=warn)
+        else:
+            raise ValueError("Invalid method for combining p-values")
+
+        # Return p-value or Test function
+        if alpha is None:
+            return p_val
+        else:
+            return 1.0*(p_val < alpha)
