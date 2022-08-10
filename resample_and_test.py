@@ -388,12 +388,18 @@ class ShiftTester():
             p_val = 1 - cauchy.cdf(cct_stat)
         return p_val
 
-    def test(self, X, replacement=None, m=None, store_last=False):
+    def test(self, X, replacement=None, m=None, store_last=False, return_p=False):
         # Resample data
         X_m = self.resample(X, replacement, m=m, store_last=store_last)
 
         # Apply test statistic
-        return self.T(X_m)
+        if return_p:
+            # raise error if self.p_val is None
+            if self.p_val is None:
+                raise ValueError("p_val is None, please set p_val before calling test")
+            return self.p_val(X_m)
+        else:
+            return self.T(X_m)
     
     def combination_test(self, X, replacement=None, m=None, store_last=False, n_combinations=10, method="hartung", alpha=None, warn=True):
         # Compute p_vals across multiple resamples
