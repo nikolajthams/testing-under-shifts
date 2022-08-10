@@ -268,7 +268,7 @@ class ShiftTester():
 
         if return_p: return p_val
         return 1*(p_val < 0.05)
-    
+
     def logistic_validity(self, X, j_x, j_y, return_p=False):
         """
         Test that resampled data has the correct conditional
@@ -300,7 +300,7 @@ class ShiftTester():
         return 1*(p_val < 0.05)
 
 
-    def tune_m(self, X, cond, j_x, j_y, gaussian=False, binary=False, m_init = None,
+    def tune_m(self, X, cond, j_x, j_y, gaussian=False, binary=False, logistic=False, m_init = None,
                m_factor=2, p_cutoff=0.1, repeats=100, const=None, replacement=None):
         # Initialize parameters
         n = X.shape[0]
@@ -319,6 +319,8 @@ class ShiftTester():
                     z = self.gaussian_validity(self.resample(X, m=int(min(m_factor*m, n)), replacement=replacement), cond=cond, j_x=j_x, j_y=j_y, const=const, return_p = True)
                 elif binary:
                     z = self.binary_validity(self.resample(X, m=int(min(m_factor*m, n)), replacement=replacement), cond=cond, j_x=j_x, j_y=j_y, return_p = True)
+                elif logistic:
+                    z = self.logistic_validity(self.resample(X, m=int(min(m_factor*m, n)), replacement=replacement), j_x=j_x, j_y=j_y, return_p = True)
                 else:
                     z = self.kernel_conditional_validity(self.resample(X, m=int(min(m_factor*m, n)), replacement=replacement), cond=cond, j_x=j_x, j_y=j_y, return_p = True)
                 res.append(z)
@@ -329,7 +331,7 @@ class ShiftTester():
             if (np.min(res) > p_cutoff): m = int(min(m_factor*m, n))
 
         return m
-    
+
     def combine_p_vals_hartung(self, p_vals, warn, kappa=None):
         n_tests = len(p_vals)
 
@@ -348,11 +350,11 @@ class ShiftTester():
         rho = max(-1/(n_tests-1), 1 - np.var(p_transformed, ddof=1))
         if kappa is None:
             kappa = 1 + 1/(n_tests - 1) - rho
-        
+
         num = lamb*p_transformed.sum()
         denom = np.sqrt(lamb + (1 - lamb)*(rho + kappa * np.sqrt(2/(n_tests + 1)))*(1-rho))
         t = num/denom
-        
+
         return 2*norm.cdf(-np.abs(t))
 
 
@@ -372,16 +374,16 @@ class ShiftTester():
             if warn:
                 warnings.warn("p_vals contains 1, this may cause problems in the CCT method", RuntimeWarning)
             return 1
-        
+
         n_tests = len(p_vals)
 
         weights = np.repeat(1/n_tests, p_vals.shape)
         is_small = np.where(p_vals < 1e-16)[0]
         is_large = np.where(p_vals >= 1e-16)[0]
-        
+
         cct_stat = sum((weights[is_small]/p_vals[is_small])/np.pi)
         cct_stat += sum(weights[is_large]*np.tan((0.5-p_vals[is_large])*np.pi))
-        
+
         if cct_stat > 1e16:
             p_val = (1/cct_stat)/np.pi
         else:
@@ -404,7 +406,7 @@ class ShiftTester():
     def combination_test(self, X, replacement=None, m=None, store_last=False, n_combinations=10, method="hartung", alpha=None, warn=True):
         # Compute p_vals across multiple resamples
         p_vals = np.array([self.p_val(self.resample(X, replacement, m=m, store_last=store_last)) for _ in range(n_combinations)])
-        
+
         if method == "hartung":
             p_val = self.combine_p_vals_hartung(p_vals=p_vals, warn=warn)
         elif method == "meinshausen":
