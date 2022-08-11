@@ -31,7 +31,6 @@ def scm(n, causal_effect=0, seed=None):
         np.random.seed(seed)
     X = 2*e(n)
     C = np.abs(X-1) + 4*e(n)
-    # C = X + 4*e(n)
     Y = C + causal_effect*X + 2*e(n)
     return cb(X, C, Y)
 
