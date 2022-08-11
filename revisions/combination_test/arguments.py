@@ -21,6 +21,8 @@ def get_args():
     argparser.add_argument('--n_repeats', type=int, default=1000)
     argparser.add_argument('--main_dir', type=str, default="revisions/combination_test")
     argparser.add_argument('--exclude_default_method', type=str2bool, nargs='?', const=True, default=False)
+    argparser.add_argument('--include_resample_hsic', type=str2bool, nargs='?', const=True, default=False)
+    argparser.add_argument('--include_competing_tests', type=str2bool, nargs='?', const=True, default=False)
 
     # Resampling and combination parameters
     argparser.add_argument('--n_combinations', type=int, default=100)
@@ -32,7 +34,7 @@ def get_args():
     argparser.add_argument('--effect_vanish_power', type=float, default=0)
     argparser.add_argument('--causal_effect_multiplier', type=float, nargs='+', default=[0])
     argparser.add_argument('--n_range', type=int, nargs='+', default=[int(10**p) for p in [2, 2.5, 3, 3.5, 4]])
-    argparser.add_argument('--use_linear_scm', type=str2bool, nargs='?', const=True, default=False)
+    argparser.add_argument('--scm', type=str, default="default_scm", choices=["default_scm", "linear", "paper_scm"])
     
     # Test parameters
     argparser.add_argument('--alpha', type=float, default=0.05)

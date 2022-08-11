@@ -20,9 +20,9 @@ def linear_scm(n, causal_effect=1, seed=None):
 def paper_scm(n, causal_effect=1, seed=None):
     if seed is not None:
         np.random.seed(seed)
-    X = e(n, mu=(2*coin(n)-1)) # Bimodal Gaussian distribution
-    C = -(X-1)**2 + 8*e(n)
-    Y = C + np.sin(C) + causal_effect*X + 2*e(n)
+    X = e(n, mu=(4*coin(n)-2)) # Bimodal Gaussian distribution
+    C = -X**2 + 2*e(n)
+    Y = np.sin(C) + causal_effect*X**2 + 2*e(n)
     return cb(X, C, Y)
 
 # Work in progress non-linear SCM
