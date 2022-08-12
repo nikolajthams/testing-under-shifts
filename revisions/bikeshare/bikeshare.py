@@ -109,7 +109,9 @@ for Y_name in ['Y1','Y2','Y3']:
     m = int(2*np.sqrt(n))
     # Use our method to test hypothesis of conditional independence
     pv = psi.combination_test(data, m=m, n_combinations=100, method="hartung")
-    print(f"CondIndep: {Y_name}: {pv}")
+    pv_single = psi.test(data, m=m, return_p=True)
+    print(f"CondIndep (single): {Y_name}: {pv_single}")
+    print(f"CondIndep (combination): {Y_name}: {pv}")
 
     # Also print p-values for test of marginal independence
     marg_pval = sm.OLS(data[Y_name], sm.add_constant(data[['Duration_var', 'Duration_mean']])).fit().f_test(["Duration_var", "Duration_mean"]).pvalue
