@@ -3,10 +3,13 @@ from itertools import product
 from resample_and_test import ShiftTester
 from cpt import CPT, Model_GAM
 from revisions.combination_test.data_generation import scm, linear_scm, paper_scm
-from revisions.combination_test.competing_tests import get_GCM, get_KCI, get_pcit, get_fcit
-from revisions.combination_test.weights_and_tests import get_permutation_p_val, get_permutation_T, get_weight_func, get_p_val_func, get_T, get_HSIC
+from revisions.combination_test.weights_and_tests import get_permutation_p_val, get_permutation_T, get_weight_func, get_p_val_func, get_T
 
 def experiment(seed=None, args=None):
+    if args.include_competing_tests:
+        from revisions.combination_test.competing_tests import get_GCM, get_KCI, get_pcit, get_fcit
+    if args.include_resample_hsic:
+        from revisions.combination_test.weights_and_tests import get_HSIC
     out = []
 
     for n, ce_multiplier in product(args.n_range, args.causal_effect_multiplier):
