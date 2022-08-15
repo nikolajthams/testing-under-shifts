@@ -7,6 +7,7 @@ from tqdm import tqdm
 from itertools import product
 import pandas as pd
 import torch
+from cpt import CPT, Model_GAM
 from statsmodels.stats.proportion import proportion_confint
 import rpy2.robjects.packages as packages
 
@@ -70,11 +71,19 @@ def GCM(X):
     pval = (GeneralisedCovarianceMeasure.gcm_test(X=to_r(X[:,0]), Z=to_r(X[:,1]), Y=to_r(X[:,2]), regr_method="gam").rx2('p.value'))[0]
     return 1*(pval < 0.05)
 
+def T_CPT(X):
+    CPT_n_step = 40
+    CPT_M = 300
+    cpt = CPT(model=Model_GAM(), M=CPT_M, n_step=CPT_n_step)
+    p_val = cpt.get_p_val(X=X[:,0], Y = X[:,2], Z = X[:,1])
+    return 1*(p_val < 0.05)
+
 # Loop parameters
 causal_effects = np.linspace(0, 1.5, num=7)
 causal_exponents = [1, 2]
 n = 150
-tests = {"HSIC": THSIC, "LinReg": T, "HSICfit": THSIC, "GCM": GCM, "KCI": KCI}
+# tests = {"HSIC": THSIC, "LinReg": T, "HSICfit": THSIC, "GCM": GCM, "KCI": KCI}
+tests = {"CPT": T_CPT}
 
 # Compute for goodness-of-fit quantile
 cutoff = np.quantile(np.random.uniform(size=(1000, 15)).min(axis=1), 0.005)
@@ -94,7 +103,7 @@ def conduct_experiment(i=None):
     out = []
     for c_e, c_exp, test in combinations:
         X = scm(n, causal_effect=c_e, causal_exponent=c_exp)
-        if not test in ["GCM", "KCI"]:
+        if not test in ["GCM", "KCI", "CPT"]:
             try:
                 if test == "HSICfit":
                     psi = ShiftTester(weight_fit, tests[test], rate=None, replacement="REPL-reject", reject_retries=500)
@@ -133,9 +142,15 @@ if __name__ == '__main__':
 
     # Pack as data frame
     df = pd.DataFrame(
-        [(x/c, *v, *proportion_confint(x, c, method="binom_test"), c) for x, v, c in zip(res, combinations, counts)],
-        columns=["alpha", "CausalEffect", "EffectOrder", "Test", "Lower", "Upper", "Count"])
+        [(x/c, *v, c) for x, v, c in zip(res, combinations, counts)],
+        columns=["alpha", "CausalEffect", "EffectOrder", "Test", "Count"])
+    # # Pack as data frame
+    # df = pd.DataFrame(
+    #     [(x/c, *v, *proportion_confint(x, c, method="binom_test"), c) for x, v, c in zip(res, combinations, counts)],
+    #     columns=["alpha", "CausalEffect", "EffectOrder", "Test", "Lower", "Upper", "Count"])
+
+
 
     # Export to R for ggplotting
     df['alpha'] = df["alpha"].replace(np.NaN, "NA")
-    df.to_csv("experiments/section-5-3/cond-independence-test.csv")
+    df.to_csv("experiments/section-5-3/cond-independence-test-cpt.csv")

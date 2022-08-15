@@ -1,9 +1,16 @@
 import statsmodels.api as sm
 import numpy as np
 from statsmodels.gam.api import GLMGam, BSplines
-
 from scipy.stats import norm
 p = norm.pdf
+
+
+# Import rpy for testing with R functions
+import rpy2.robjects.packages as packages
+import rpy2.robjects as robj
+dHSIC = packages.importr("dHSIC")
+def to_r(x): return robj.FloatVector(x)
+
 
 
 # Weights
@@ -42,6 +49,16 @@ def get_T(causal_effect=0, alpha=0.05, test_conf_int=False, response_pos=2, cova
         lower, upper = sm.OLS(X[:, response_pos], sm.tools.add_constant(X[:, covariate_pos])).fit().conf_int(alpha=alpha)[1]
         return 1.0*((lower > causal_effect) | (causal_effect > upper))
     return T_CI if test_conf_int else T
+
+# HSIC test statistic
+def get_HSIC(args, return_p_val=False):
+    def THSIC(X):
+        pval = dHSIC.dhsic_test(X=to_r(X[:,args.covariate_pos]), Y=to_r(X[:,args.response_pos])).rx2("p.value")[0]
+        if return_p_val:
+            return pval
+        else:
+            return 1.0*(pval < args.alpha)
+    return THSIC
 
 def permutation_test(X, Y, n_permutations=1000, seed=None, alpha=None):
     if seed is not None:
