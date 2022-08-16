@@ -262,7 +262,7 @@ class ShiftTester():
         formula = f"x{j_y[0]}~" + ":".join(f"C(x{i})" for i in j_x) + "-1"
 
         # Convert the conditional distribution to log-odds
-        log_odds = {k: np.log(p / (1 - p)) for k, p in log_odds.items()}
+        log_odds = {k: np.log(p / (1 - p)) for k, p in cond.items()}
 
         # Create list of tests to conduct
         tests = [":".join([f"C(x{idx})[{val}]" for idx, val in zip(j_x, outcome)]) + f"={p}" for outcome, p in
@@ -373,7 +373,7 @@ class ShiftTester():
             grid = np.linspace(gamma_min, 1, grid_size)
             return np.min([np.quantile(p_vals / g, g) for g in grid])
 
-    def combine_p_vals_cct(selv, p_vals, warn):
+    def combine_p_vals_cct(self, p_vals, warn):
         if min(p_vals) == 0:
             if warn:
                 warnings.warn("p_vals contains 0, this may cause problems in the CCT method", RuntimeWarning)
@@ -398,13 +398,18 @@ class ShiftTester():
             p_val = 1 - cauchy.cdf(cct_stat)
         return p_val
 
-    def test(self, X, replacement=None, m=None, store_last=False):
+    def test(self, X, replacement=None, m=None, store_last=False, return_p=False):
         # Resample data
         X_m = self.resample(X, replacement, m=m, store_last=store_last)
 
-        # Apply test statistic
-        return self.T(X_m)
-
+        if return_p:
+            # raise error if self.p_val is None
+            if self.p_val is None:
+                raise ValueError("p_val is None, please set p_val before calling test")
+            return self.p_val(X_m)
+        else:
+            return self.T(X_m)
+    
     def combination_test(self, X, replacement=None, m=None, store_last=False, n_combinations=10, method="hartung",
                          alpha=None, warn=True, seed=None):
         # Compute p_vals across multiple resamples

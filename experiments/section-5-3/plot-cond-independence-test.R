@@ -4,21 +4,31 @@ library(tikzDevice)
 library(RColorBrewer)
 library(ggh4x)
 
-use.tikz <- F
+use.tikz <- T
 
 # Load
 df <- read_delim("cond-independence-test.csv", delim=",", col_types = cols(n="f", EffectOrder="f"))
+df[,c("Upper", "Lower", "n")] <- list(NULL)
 df$Test[df$Test == "LinReg"] = "CorTest $+ \\Psi_{\\texttt{DRPL}}$"
 df$Test[df$Test == "HSIC"] = "HSIC $+ \\Psi_{\\texttt{DRPL}}$"
 df$Test[df$Test == "HSICfit"] = "HSICfit $+ \\Psi_{\\texttt{DRPL}}$"
+# Load CPT
+df.cpt = read_delim("cond-independence-test-cpt.csv", delim=",", col_types = cols(n="f", EffectOrder="f"))
+df.cpt$Test[df.cpt$Test == "CPT"] = "CPT"
+df <- rbind(df, df.cpt)
+
+
+# Factor for plotting conditional vs marginal tests
+test.type_names <- c("marg" = "Resampling and marginal test", "cond" = "Conditional test")
+df$TestType <- factor(ifelse(df$Test %in% c("GCM", "KCI", "CPT"), "cond", "marg"), levels=names(test.type_names), labels=test.type_names)
+
+
+
 
 # Order names
 order_names <- c("1" = "Linear", "2" = "Quadratic")
 df$EffectOrder <- factor(df$EffectOrder, levels=names(order_names), labels = order_names)
 
-# Factor for plotting conditional vs marginal tests
-test.type_names <- c("marg" = "Resampling and marginal test", "cond" = "Conditional test")
-df$TestType <- factor(ifelse(df$Test %in% c("GCM", "KCI"), "cond", "marg"), levels=names(test.type_names), labels=test.type_names)
 
 # Set confidence level
 conf.level = 0.05
@@ -33,7 +43,7 @@ p <- df %>%
   geom_point(size=0.3) +
   geom_line() +
   geom_hline(aes(lty="5\\% level", yintercept=conf.level), size=0.1,  show.legend = T) +
-  geom_ribbon(aes(ymax=Upper, ymin=Lower), fill="grey70", size=0.3,alpha=.2)+
+  # geom_ribbon(aes(ymax=Upper, ymin=Lower), fill="grey70", size=0.3,alpha=.2)+
   labs(y="Rejection rate", x="Strength of direct effect", fill = "Direct effect", colour="Direct effect")+
   scale_y_continuous(labels = function(z){paste0(100*z, "\\%")}) +
   scale_linetype_manual(values = c("22"), breaks = "5\\% level", name=NULL) +
