@@ -1,0 +1,10 @@
+*
+!*/
+!*.py
+!*.gitignore
+!*.pickle
+!*.csv
+!*.json
+!*.r
+!*.gitignore
+!*.md
