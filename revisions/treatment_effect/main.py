@@ -2,6 +2,7 @@ import numpy as np
 import pandas as pd
 import argparse
 from itertools import product
+from statsmodels.stats.proportion import proportion_confint
 from scipy.stats import ttest_ind
 import statsmodels.api as sm
 from scipy.stats import norm
@@ -54,7 +55,7 @@ def scm(n, causal_effect, args, seed=None):
     Z = e(n, dim=args.z_dim)
     Z_sum = np.sum(Z, axis=1, keepdims=True)
     X = coin(n, p=sigmoid(Z_sum))
-    Y = causal_effect * X + np.exp(-Z_sum**2/2)*np.sin(args.zy_complexity*Z_sum)
+    Y = causal_effect * X + np.exp(-Z_sum**2/2)*np.sin(args.zy_complexity*Z_sum) + np.sqrt(0.1)*e(n)
     
     # Create data frame with X, Y and Z
     df = pd.DataFrame({"X": X.reshape(-1), "Y": Y.reshape(-1)} | {f"Z_{i}": Z[:,i] for i in range(args.z_dim)})
@@ -106,7 +107,6 @@ def get_double_ml_binary_treatment(args):
         return dml_model.pval[0]
     return double_ml_binary_treatment
 
-
 def experiment(seed=None, args=None):
     # Initiate double_ml model
     double_ml_binary_treatment = get_double_ml_binary_treatment(args)
@@ -114,11 +114,11 @@ def experiment(seed=None, args=None):
 
     for n, ce in product(args.n_range, args.causal_effect):
         data = scm(n=n, causal_effect=ce, args=args, seed=seed)
-        psi = ShiftTester(weight=get_weight(args), p_val = get_p_val(args))
+        psi = ShiftTester(weight=get_weight(args), p_val = get_p_val(args), degenerate="retry")
         # Add ours
         out.append({
             "method": "ours",
-            "reject": 1.0*(psi.combination_test(data, replacement=args.replacement, m=int(np.sqrt(len(data)))) < args.alpha),
+            "reject": 1.0*(psi.combination_test(data, replacement=args.replacement, m=int(np.sqrt(len(data))), method="cct") < args.alpha),
             "n": n,
             "causal_effect": ce
         })
@@ -159,3 +159,15 @@ if __name__ == "__main__":
     # Save args file
     with open(os.path.join(MAIN_DIR, "args", f"{time_string}.json"), "w") as f:
         json.dump(vars(args), f, indent=2)
+
+    def get_ci(rejects):
+        lower, upper = proportion_confint(count=rejects.sum(), nobs = len(rejects), alpha=0.05, method="wilson")
+        return lower, rejects.mean(), upper
+    
+    df = df.groupby([i for i in df.columns if i != "reject"]).aggregate(get_ci)
+    for n,col in enumerate(["lower", "mean", "upper"]):
+        df[col] = df['reject'].apply(lambda x: x[n])
+    df = df.drop('reject',axis=1).rename({"mean": "reject"}, axis=1).reset_index()
+
+    df.to_csv(os.path.join(MAIN_DIR, "results", f"{time_string}.csv"), index=False)
+    df.to_csv(os.path.join(MAIN_DIR, "latest.csv"), index=False)
