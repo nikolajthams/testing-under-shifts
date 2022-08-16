@@ -59,7 +59,12 @@ class ShiftTester():
         """
 
         # Potentially overwrite default replacement
+        if replacement == "False":
+            replacement = False
+        elif replacement == "True":
+            replacement = True
         replacement = replacement if replacement is not None else self.replacement
+
 
         # Compute sample and resample size
         n = X.shape[0]
@@ -308,9 +313,10 @@ class ShiftTester():
         replacement = self.replacement if replacement is None else replacement
 
         res = [1]
+        p_func = np.min
 
-        # Loop over increasing m as long as level is below 10%
-        while (np.min(res) > p_cutoff) and (m < n):
+        # Loop over increasing m as long as level is below threshold
+        while (p_func(res) > p_cutoff) and (m < n):
             # m = int(2*m)
             res = []
             for _ in tqdm(range(repeats)) if self.verbose else range(repeats):
@@ -326,9 +332,9 @@ class ShiftTester():
                 res.append(z)
 
             if self.verbose:
-                print(f"mean {np.min(res)}, m {min(m_factor*m, n)}")
+                print(f"mean {p_func(res)}, m {min(m_factor*m, n)}")
 
-            if (np.min(res) > p_cutoff): m = int(min(m_factor*m, n))
+            if (p_func(res) > p_cutoff): m = int(min(m_factor*m, n))
 
         return m
 
