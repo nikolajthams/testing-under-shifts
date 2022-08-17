@@ -3,6 +3,7 @@ from scipy.stats import norm, cauchy
 import pandas as pd
 from tqdm import tqdm
 import torch
+from statsmodels.gam.api import GLMGam, BSplines
 import statsmodels.api as sm
 import statsmodels.formula.api as smf
 import warnings
@@ -163,7 +164,7 @@ class ShiftTester():
 
         return out
 
-    def kernel_conditional_validity(self, X, cond, j_x, j_y, return_p=False):
+    def kernel_conditional_validity(self, X, cond, j_x, j_y, return_p=False, already_pandas=False):
         """
         Test that resampled data has the correct conditional
 
@@ -204,7 +205,7 @@ class ShiftTester():
         if return_p: return result['pvalue']
         return 1 * result['h0_rejected']
 
-    def gaussian_validity(self, X, cond, j_x, j_y, const=None, return_p=False):
+    def gaussian_validity(self, X, cond, j_x, j_y, const=None, return_p=False, already_pandas=False, use_nonlinear=False, n_basis_functions=4):
         """
         Test that resampled data has the correct conditional
 
@@ -225,21 +226,38 @@ class ShiftTester():
         return_p:
             If True, returns p-value, else 0-1 indicator of rejection
         """
-        x, y = X[:, j_x], X[:, j_y]
-        if const == "fit":
-            tests = [f"(x{i + 1} = {b})" for i, b in enumerate(cond)]
-            p_val = sm.OLS(y, sm.add_constant(x)).fit().f_test(tests).pvalue
-        elif const is not None:
-            tests = [f"(const = {const})"] + [f"(x{i + 1} = {b})" for i, b in enumerate(cond)]
-            p_val = sm.OLS(y, sm.add_constant(x)).fit().f_test(tests).pvalue
-        else:
-            tests = [f"(x{i + 1} = {b})" for i, b in enumerate(cond)]
-            p_val = sm.OLS(y, x).fit().f_test(tests).pvalue
+        def get_model(y, x, const=True): 
+            if use_nonlinear:
+                return GLMGam(y, exog=np.ones(y.shape), smoother=BSplines(x, df = [n_basis_functions for _ in len(j_x)], degree=[3 for _ in len(j_x)])).fit()
+            elif not const:
+                return sm.OLS(y, x).fit()
+            else:
+                return sm.OLS(y, sm.add_constant(x)).fit()
+        if type(X) == np.ndarray:
+            x, y = X[:, j_x], X[:, j_y]
+            if const == "fit":
+                tests = [f"(x{i + 1} = {b})" for i, b in enumerate(cond)]
+                model = get_model(y, x)
+                p_val = model.f_test(tests).pvalue
+            elif const is not None:
+                tests = [f"(const = {const})"] + [f"(x{i + 1} = {b})" for i, b in enumerate(cond)]
+                model= get_model(y, x, const=False)
+                p_val = model.f_test(tests).pvalue
+            else:
+                tests = [f"(x{i + 1} = {b})" for i, b in enumerate(cond)]
+                model = get_model(y, x)
+                p_val = sm.OLS(y, x).fit().f_test(tests).pvalue
+        elif type(X) == pd.core.frame.DataFrame:
+            tests = [f"{col}_s{i}=0" for col in X[j_x].columns for i in range(n_basis_functions-1)]
+            model = get_model(X[j_y], X[j_x])
+            p_val = model.f_test(tests).pvalue
+        
+
 
         if return_p: return p_val
         return 1 * (p_val < 0.05)
 
-    def binary_validity(self, X, cond, j_x, j_y, const=None, return_p=False):
+    def binary_validity(self, X, cond, j_x, j_y, const=None, return_p=False, already_pandas=False):
         """
         Test that resampled data has the correct conditional
 
@@ -279,7 +297,7 @@ class ShiftTester():
         if return_p: return p_val
         return 1 * (p_val < 0.05)
 
-    def logistic_validity(self, X, j_x, j_y, return_p=False):
+    def logistic_validity(self, X, j_x, j_y, return_p=False, already_pandas=False):
         """
         Test that resampled data has the correct conditional
 
@@ -293,24 +311,33 @@ class ShiftTester():
         return_p:
             If True, returns p-value, else 0-1 indicator of rejection
         """
+        
         # Convert X to data frame
-        df = pd.DataFrame(X[:, j_y + j_x], columns=["x" + str(i) for i in j_y + j_x])
+        if not already_pandas:
+            df = pd.DataFrame(X[:, j_y + j_x], columns=["x" + str(i) for i in j_y + j_x])
+            # Setup formula for statsmodels
+            formula = f"x{j_y[0]}~" + "+".join(f"x{i}" for i in j_x)
 
-        # Setup formula for statsmodels
-        formula = f"x{j_y[0]}~" + "+".join(f"x{i}" for i in j_x)
+            # Create list of tests to conduct
+            tests = [f"x{j}=0" for j in j_x]
+        else:
+            df = X
+            # Setup formula for statsmodels
+            formula = f"{j_y}~" + "+".join(f"{i}" for i in j_x)
 
-        # Create list of tests to conduct
-        tests = [f"x{j}=0" for j in j_x]
+            # Create list of tests to conduct
+            tests = [f"{i}=0" for i in j_x]
+
 
         # Conduct F-test and get p-value
-        p_val = smf.glm(formula=formula, data=df, family=sm.families.Binomial()).fit(disp=0).wald_test(tests, scalar=True).pvalue
+        p_val = smf.glm(formula=formula, data=df, family=sm.families.Binomial()).fit(disp=0).f_test(tests).pvalue
         # p_val = smf.logit(formula, data=df).fit(disp=0).f_test(tests).pvalue
 
         if return_p: return p_val
         return 1 * (p_val < 0.05)
 
     def tune_m(self, X, cond, j_x, j_y, gaussian=False, binary=False, logistic=False, m_init=None,
-               m_factor=2, p_cutoff=0.1, repeats=100, const=None, replacement=None):
+               m_factor=2, p_cutoff=0.1, repeats=100, const=None, replacement=None, already_pandas=False):
         # Initialize parameters
         n = X.shape[0]
         m = int(np.sqrt(n) / 2) if m_init is None else m_init
@@ -327,17 +354,17 @@ class ShiftTester():
 
                 if gaussian:
                     z = self.gaussian_validity(self.resample(X, m=int(min(m_factor * m, n)), replacement=replacement),
-                                               cond=cond, j_x=j_x, j_y=j_y, const=const, return_p=True)
+                                               cond=cond, j_x=j_x, j_y=j_y, const=const, return_p=True, already_pandas=already_pandas)
                 elif binary:
                     z = self.binary_validity(self.resample(X, m=int(min(m_factor * m, n)), replacement=replacement),
-                                             cond=cond, j_x=j_x, j_y=j_y, return_p=True)
+                                             cond=cond, j_x=j_x, j_y=j_y, return_p=True, already_pandas=already_pandas)
                 elif logistic:
                     z = self.logistic_validity(self.resample(X, m=int(min(m_factor * m, n)), replacement=replacement),
-                                               j_x=j_x, j_y=j_y, return_p=True)
+                                               j_x=j_x, j_y=j_y, return_p=True, already_pandas=already_pandas)
                 else:
                     z = self.kernel_conditional_validity(
                         self.resample(X, m=int(min(m_factor * m, n)), replacement=replacement), cond=cond, j_x=j_x,
-                        j_y=j_y, return_p=True)
+                        j_y=j_y, return_p=True, already_pandas=already_pandas)
                 res.append(z)
 
             if self.verbose:
@@ -422,7 +449,7 @@ class ShiftTester():
         p_vals = np.array(
             [self.p_val(self.resample(X, replacement, m=m, store_last=store_last, seed=seed+_ if seed is not None else seed)) for _ in range(n_combinations)])
         # filter nan
-        p_vals = [p for p in p_vals if not np.isnan(p)]
+        p_vals = np.array([p for p in p_vals if not np.isnan(p)])
 
         if method == "hartung":
             p_val = self.combine_p_vals_hartung(p_vals=p_vals, warn=warn)

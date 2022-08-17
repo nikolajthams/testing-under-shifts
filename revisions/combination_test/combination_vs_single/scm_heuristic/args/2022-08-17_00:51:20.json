@@ -1,0 +1,46 @@
+{
+  "n_cpu": 6,
+  "seed": null,
+  "n_repeats": 500,
+  "main_dir": "revisions/combination_test/combination_vs_single/scm_heuristic",
+  "exclude_default_method": true,
+  "include_combination_tests": false,
+  "include_combination_heuristic_tests": true,
+  "include_resample_hsic": false,
+  "include_competing_tests": false,
+  "include_heuristic": true,
+  "include_cpt": false,
+  "include_resample_pt": false,
+  "n_combinations": 100,
+  "m_rate": 0.5,
+  "replacement": "False",
+  "use_heuristic_for_combination": false,
+  "effect_vanish_power": 0,
+  "causal_effect_multiplier": [
+    0.0,
+    0.5
+  ],
+  "n_range": [
+    200,
+    400,
+    600,
+    800,
+    1000
+  ],
+  "scm": "default_scm",
+  "alpha": 0.05,
+  "test_conf_int": false,
+  "response_pos": 2,
+  "covariate_pos": 0,
+  "Z_pos": 1,
+  "reweight_target": 1,
+  "reweight_covariate": [
+    0
+  ],
+  "target_var_reduction_factor": 1,
+  "quantile_repeats": 10,
+  "m_init": 10,
+  "heuristic_alpha": 0.1,
+  "CPT_M": 300,
+  "CPT_n_step": 40
+}
