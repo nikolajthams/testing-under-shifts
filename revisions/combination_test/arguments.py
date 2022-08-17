@@ -20,9 +20,16 @@ def get_args():
     argparser.add_argument('--seed', type=int, default=None)
     argparser.add_argument('--n_repeats', type=int, default=1000)
     argparser.add_argument('--main_dir', type=str, default="revisions/combination_test")
+    
+    # Define set of tests to conduct
     argparser.add_argument('--exclude_default_method', type=str2bool, nargs='?', const=True, default=False)
+    argparser.add_argument('--include_combination_tests', type=str2bool, nargs='?', const=True, default=False)
+    argparser.add_argument('--include_combination_heuristic_tests', type=str2bool, nargs='?', const=True, default=False)
     argparser.add_argument('--include_resample_hsic', type=str2bool, nargs='?', const=True, default=False)
     argparser.add_argument('--include_competing_tests', type=str2bool, nargs='?', const=True, default=False)
+    argparser.add_argument('--include_heuristic', type=str2bool, nargs='?', const=True, default=False)
+    argparser.add_argument('--include_cpt', type=str2bool, nargs='?', const=True, default=False)
+    argparser.add_argument('--include_resample_pt', type=str2bool, nargs='?', const=True, default=False)
 
     # Resampling and combination parameters
     argparser.add_argument('--n_combinations', type=int, default=100)
@@ -48,12 +55,11 @@ def get_args():
     
 
     # Heuristic parameters
-    argparser.add_argument('--exclude_heuristic', type=str2bool, nargs='?', const=True, default=False)
     argparser.add_argument('--quantile_repeats', type=int, default=10)
     argparser.add_argument('--m_init', type=int, default=None)
+    argparser.add_argument('--heuristic_alpha', type=float, default=0.05)
     
     # CPT parameters
-    argparser.add_argument('--exclude_cpt', type=str2bool, nargs='?', const=True, default=False)
     argparser.add_argument('--CPT_M', type=int, default=300)
     argparser.add_argument('--CPT_n_step', type=int, default=40)
 

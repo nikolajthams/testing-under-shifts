@@ -39,19 +39,38 @@ def experiment(seed=None, args=None):
                     "n": n,
                     "causal_effect": causal_effect
                 })
-            # Conduct combination tests
+        # Conduct combination tests
+        if args.include_combination_tests:
             for combination_type in ["hartung", "meinshausen", "cct"]:
-                if args.use_heuristic_for_combination:
-                    p_cutoff = np.quantile(np.random.uniform(size=(1000, args.quantile_repeats)).min(axis=1), 0.05)
-                    m_combination = psi.tune_m(data, j_x=[0], j_y=[1], gaussian=True, repeats=args.quantile_repeats, cond=[0], m_init=args.m_init, p_cutoff=p_cutoff, m_factor=1.3)
-                else: 
-                    m_combination = m
+                m_combination = m
                 out.append({
                         "method": combination_type,
                         "reject": psi.combination_test(data, m=m_combination, n_combinations=args.n_combinations, method=combination_type, warn=False, alpha=args.alpha),
                         "n": n,
                         "causal_effect": causal_effect
                     })
+        # Conduct single test with heuristic
+        if args.include_heuristic:
+            p_cutoff = np.quantile(np.random.uniform(size=(1000, args.quantile_repeats)).min(axis=1), args.heuristic_alpha)
+            m_heuristic = psi.tune_m(data, j_x=[0], j_y=[1], gaussian=True, repeats=args.quantile_repeats, cond=[0], m_init=args.m_init, p_cutoff=p_cutoff, m_factor=1.3)
+            out.append({
+                    "method": "heuristic",
+                    "reject": psi.test(data, m=m_heuristic),
+                    "n": n,
+                    "causal_effect": causal_effect
+                })
+        # Conduct combination tests with heuristic
+        if args.include_combination_heuristic_tests:
+            for combination_type in ["hartung", "meinshausen", "cct"]:
+                p_cutoff = np.quantile(np.random.uniform(size=(1000, args.quantile_repeats)).min(axis=1), args.heuristic_alpha)
+                m_combination = psi.tune_m(data, j_x=[0], j_y=[1], gaussian=True, repeats=args.quantile_repeats, cond=[0], m_init=args.m_init, p_cutoff=p_cutoff, m_factor=1.3)
+                out.append({
+                        "method": f"{combination_type}-heuristic",
+                        "reject": psi.combination_test(data, m=m_combination, n_combinations=args.n_combinations, method=combination_type, warn=False, alpha=args.alpha),
+                        "n": n,
+                        "causal_effect": causal_effect
+                    })
+                
         if args.include_resample_hsic:
             T_HSIC = get_HSIC(args, return_p_val=False)
             pval_HSIC = get_HSIC(args, return_p_val=True)
@@ -65,7 +84,7 @@ def experiment(seed=None, args=None):
             # Conduct combination tests
             for combination_type in ["hartung", "meinshausen", "cct"]:
                 if args.use_heuristic_for_combination:
-                    p_cutoff = np.quantile(np.random.uniform(size=(1000, args.quantile_repeats)).min(axis=1), 0.05)
+                    p_cutoff = np.quantile(np.random.uniform(size=(1000, args.quantile_repeats)).min(axis=1), args.heuristic_alpha)
                     m_combination = psi_HSIC.tune_m(data, j_x=[0], j_y=[1], gaussian=True, repeats=args.quantile_repeats, cond=[0], m_init=args.m_init, p_cutoff=p_cutoff, m_factor=1.3)
                 else: 
                     m_combination = m
@@ -75,18 +94,8 @@ def experiment(seed=None, args=None):
                         "n": n,
                         "causal_effect": causal_effect
                     })
-        # Conduct single test with heuristic
-        if not args.exclude_heuristic:
-            p_cutoff = np.quantile(np.random.uniform(size=(1000, args.quantile_repeats)).min(axis=1), 0.05)
-            m_heuristic = psi.tune_m(data, j_x=[0], j_y=[1], gaussian=True, repeats=args.quantile_repeats, cond=[0], m_init=args.m_init, p_cutoff=p_cutoff, m_factor=1.3)
-            out.append({
-                    "method": "heuristic",
-                    "reject": psi.test(data, m=m_heuristic),
-                    "n": n,
-                    "causal_effect": causal_effect
-                })
         # Conduct CPT test
-        if not args.exclude_cpt:
+        if args.include_cpt:
             cpt = CPT(model=Model_GAM(), M=args.CPT_M, n_step=args.CPT_n_step)
             p_val = cpt.get_p_val(X=data[:,args.covariate_pos], Y = data[:,args.response_pos], Z = data[:,args.Z_pos])
             out.append({
@@ -95,7 +104,7 @@ def experiment(seed=None, args=None):
                     "n": n,
                     "causal_effect": causal_effect
                 })
-            
+        if args.include_resample_pt:            
             # Use resampling and then a permutation test for comparison with the CPT
             perm_p_val_func = get_permutation_p_val(n_permutations=args.CPT_M, response_pos=args.response_pos, covariate_pos=args.covariate_pos)
             perm_T = get_permutation_T(n_permutations=args.CPT_M, response_pos=args.response_pos, covariate_pos=args.covariate_pos, alpha=args.alpha)
